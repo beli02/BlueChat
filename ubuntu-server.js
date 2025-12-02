@@ -9,7 +9,7 @@
   2. Node package: npm install @abandonware/bleno
   3. Run: sudo node ubuntu-server.js
 
-  This will advertise the "BlueChat Host" device that your Android phone can connect to.
+  This will advertise the "BlueChat" device that your Android phone can connect to.
 */
 
 // We use @abandonware/bleno because the original 'bleno' does not work on Node 10+
@@ -82,8 +82,9 @@ function sendMessage(text) {
 // Start Advertising
 bleno.on('stateChange', function(state) {
   if (state === 'poweredOn') {
-    console.log('Bluetooth ON. Advertising "BlueChat Host"...');
-    bleno.startAdvertising('BlueChat Host', [SERVICE_UUID]);
+    // CRITICAL FIX: Name shortened to 'BlueChat' to fit 31-byte limit with UUID
+    console.log('Bluetooth ON. Advertising "BlueChat"...');
+    bleno.startAdvertising('BlueChat', [SERVICE_UUID]);
   } else {
     bleno.stopAdvertising();
   }

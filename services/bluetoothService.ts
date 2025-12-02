@@ -70,10 +70,16 @@ export class BluetoothService {
     try {
       console.log("Starting Scan...");
       
-      // We explicitly look for the Nordic UART Service.
-      // This is required for the browser to allow connection to the service later.
+      // CRITICAL UPDATE: 
+      // 1. Look for Service UUID (Standard)
+      // 2. OR Look for Name 'BlueChat' (Fallback if Linux drops UUID from packet)
+      // 3. Must include optionalServices to access the UART service if matched by Name.
       const device = await (navigator as any).bluetooth.requestDevice({
-        filters: [{ services: [UART_SERVICE_UUID] }]
+        filters: [
+          { services: [UART_SERVICE_UUID] },
+          { name: 'BlueChat' }
+        ],
+        optionalServices: [UART_SERVICE_UUID]
       });
 
       console.log("Device selected by user:", device.name);

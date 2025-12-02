@@ -106,8 +106,9 @@ const DeviceScanner: React.FC<DeviceScannerProps> = ({ onConnect, isSimulated, t
               <p>Настройки → Приложения → Brave → Права → Местоположение (Разрешить).</p>
             </div>
             <div className="bg-slate-800 p-3 rounded">
-              <strong className="text-white block mb-1">3. Brave Shields</strong>
-              <p>Нажмите на иконку Льва в адресной строке и ОТКЛЮЧИТЕ защиту для этого сайта (Shields DOWN).</p>
+              <strong className="text-white block mb-1">3. Не видно сервер?</strong>
+              <p>Попробуйте перезагрузить Bluetooth на Linux:</p>
+              <code className="block bg-black p-1 text-xs mt-1">sudo hciconfig hci0 reset</code>
             </div>
           </div>
           <button 
