@@ -5,14 +5,27 @@
   Run this script on your Ubuntu machine to simulate a Chat Partner.
   
   PREREQUISITES:
-  1. Install libraries: sudo apt-get install bluetooth bluez libbluetooth-dev libudev-dev
-  2. Install Node packages: npm install bleno
-  3. Run with sudo: sudo node ubuntu-server.js
+  1. System tools: sudo apt-get install bluetooth bluez libbluetooth-dev libudev-dev build-essential
+  2. Node package: npm install @abandonware/bleno
+  3. Run: sudo node ubuntu-server.js
 
   This will advertise the "BlueChat Host" device that your Android phone can connect to.
 */
 
-const bleno = require('bleno');
+// We use @abandonware/bleno because the original 'bleno' does not work on Node 10+
+let bleno;
+try {
+  bleno = require('@abandonware/bleno');
+} catch (e) {
+  try {
+    bleno = require('bleno');
+    console.warn("WARNING: Using old 'bleno'. If it crashes, install '@abandonware/bleno'");
+  } catch (e2) {
+    console.error("ERROR: Could not find 'bleno' or '@abandonware/bleno'.");
+    console.error("Please run: npm install @abandonware/bleno");
+    process.exit(1);
+  }
+}
 
 // Nordic UART Service UUIDs (Must match the App's types.ts)
 const SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
@@ -90,3 +103,4 @@ bleno.on('advertisingStart', function(error) {
 });
 
 console.log("Starting BlueChat Server...");
+console.log("Ensure Bluetooth is ON and no other process is using it.");
