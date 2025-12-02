@@ -103,7 +103,7 @@ const DeviceScanner: React.FC<DeviceScannerProps> = ({ onConnect, isSimulated, t
             </div>
             <div className="bg-slate-800 p-3 rounded">
               <strong className="text-white block mb-1">2. Права браузера</strong>
-              <p>Настройки -> Приложения -> Brave -> Права -> Местоположение (Разрешить).</p>
+              <p>Настройки → Приложения → Brave → Права → Местоположение (Разрешить).</p>
             </div>
             <div className="bg-slate-800 p-3 rounded">
               <strong className="text-white block mb-1">3. Brave Shields</strong>
