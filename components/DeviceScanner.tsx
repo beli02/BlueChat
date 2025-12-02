@@ -15,20 +15,20 @@ const DeviceScanner: React.FC<DeviceScannerProps> = ({ onConnect }) => {
   const [showHelp, setShowHelp] = useState(false);
 
   const addLog = (msg: string) => {
-    setDebugLog(prev => [msg, ...prev].slice(0, 5)); // Keep last 5 logs
+    setDebugLog(prev => [msg, ...prev].slice(0, 5));
   };
 
-  const startScan = async () => {
-    // CRITICAL: We must call the API *immediately* on click to preserve the User Gesture.
+  const startScan = async (simulation: boolean = false) => {
     setError(null);
     setDevices([]);
-    addLog("Запуск сканирования...");
+    bluetoothService.setSimulationMode(simulation);
+    
+    if(simulation) addLog("Запуск ДЕМО режима...");
+    else addLog("Запуск сканирования (Все устройства)...");
 
     try {
-      // 1. Trigger the native browser picker immediately
       const foundDevices = await bluetoothService.scan();
       
-      // 2. Only update state AFTER the user has interacted with the native picker
       setIsScanning(true);
       addLog("Устройство выбрано!");
 
@@ -41,6 +41,7 @@ const DeviceScanner: React.FC<DeviceScannerProps> = ({ onConnect }) => {
 
       if (formattedDevices.length > 0) {
         setDevices(formattedDevices);
+        // Auto-select the first one if it's the only one found (common in web bluetooth)
         handleConnect(formattedDevices[0]);
       } else {
         setError("Устройства не найдены");
@@ -50,15 +51,11 @@ const DeviceScanner: React.FC<DeviceScannerProps> = ({ onConnect }) => {
     } catch (err: any) {
       console.error("Scan Error:", err);
       addLog(`ERR: ${err.name} - ${err.message}`);
-      
       setIsScanning(false);
-
       if (err.name === 'NotFoundError') {
-        setError("Поиск отменен (или тайм-аут)");
-      } else if (err.name === 'SecurityError') {
-        setError("Нужен HTTPS или Localhost");
+        setError("Поиск отменен.");
       } else if (err.name === 'NotAllowedError') {
-        setError("Доступ запрещен. Проверьте настройки Brave/Android.");
+        setError("Доступ запрещен. Проверьте права.");
       } else {
         setError(`Ошибка: ${err.message}`);
       }
@@ -79,7 +76,7 @@ const DeviceScanner: React.FC<DeviceScannerProps> = ({ onConnect }) => {
       console.error("Connect Error:", err);
       addLog(`CONN ERR: ${err.message}`);
       setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'error' } : d));
-      setError(`Ошибка подключения: ${err.message}`);
+      setError(`Ошибка: ${err.message}`);
     }
   };
 
@@ -92,20 +89,17 @@ const DeviceScanner: React.FC<DeviceScannerProps> = ({ onConnect }) => {
       {/* Help Modal */}
       {showHelp && (
         <div className="absolute inset-0 z-50 bg-darker/95 p-6 flex flex-col justify-center animate-fade-in">
-          <h3 className="text-xl font-bold text-primary mb-4">Проблемы с Android/Brave?</h3>
+          <h3 className="text-xl font-bold text-primary mb-4">Помощь</h3>
           <div className="text-sm text-slate-300 space-y-3 mb-6 overflow-y-auto max-h-[60vh]">
             <div className="bg-slate-800 p-3 rounded">
-              <strong className="text-white block mb-1">1. Геолокация (GPS)</strong>
-              <p>На Android Bluetooth требует включенного GPS.</p>
+              <strong className="text-white block mb-1">Как найти сервер?</strong>
+              <p>Мы включили режим "Показать всё".</p>
+              <p>1. Нажмите "Поиск".</p>
+              <p>2. В списке Bluetooth выберите <strong>BlueChat</strong> (или похожее).</p>
             </div>
             <div className="bg-slate-800 p-3 rounded">
-              <strong className="text-white block mb-1">2. Права браузера</strong>
-              <p>Настройки → Приложения → Brave → Права → Местоположение (Разрешить).</p>
-            </div>
-            <div className="bg-slate-800 p-3 rounded">
-              <strong className="text-white block mb-1">3. Не видно сервер?</strong>
-              <p>1. Перезагрузите скрипт на Ubuntu (sudo node ubuntu-server.js)</p>
-              <p>2. Выключите/Включите Bluetooth на телефоне (очистка кэша)</p>
+              <strong className="text-white block mb-1">Ничего не работает?</strong>
+              <p>Нажмите кнопку "ДЕМО РЕЖИМ" внизу экрана, чтобы протестировать чат без сервера.</p>
             </div>
           </div>
           <button 
@@ -128,7 +122,7 @@ const DeviceScanner: React.FC<DeviceScannerProps> = ({ onConnect }) => {
         </div>
         
         <p className="text-slate-400 text-sm mb-8 text-center">
-          {isScanning ? 'Инициализация...' : 'Нажмите кнопку поиска'}
+          {isScanning ? 'Выберите устройство в списке...' : 'Нажмите кнопку поиска'}
         </p>
 
         {/* Radar UI */}
@@ -145,7 +139,7 @@ const DeviceScanner: React.FC<DeviceScannerProps> = ({ onConnect }) => {
           )}
 
           <button
-            onClick={startScan}
+            onClick={() => startScan(false)}
             disabled={isScanning}
             className={`z-20 w-20 h-20 rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(6,182,212,0.4)] transition-all transform active:scale-95 ${
               isScanning ? 'bg-slate-800 text-primary' : 'bg-primary text-darker hover:bg-cyan-400'
@@ -186,7 +180,6 @@ const DeviceScanner: React.FC<DeviceScannerProps> = ({ onConnect }) => {
             </div>
           )}
 
-          {/* DEBUG LOG - Helps identify Brave/Android issues */}
           {debugLog.length > 0 && (
             <div className="mt-4 p-2 bg-black/40 rounded text-[10px] font-mono text-slate-500 w-full overflow-hidden">
               <div className="text-slate-400 mb-1 border-b border-slate-700">DEBUG LOG:</div>
@@ -198,9 +191,15 @@ const DeviceScanner: React.FC<DeviceScannerProps> = ({ onConnect }) => {
         </div>
       </div>
 
-      {/* Footer (No Simulation Toggle) */}
-      <div className="absolute bottom-4 left-0 w-full flex flex-col items-center gap-2">
-         <div className="text-[10px] text-slate-600 font-medium">
+      {/* Footer Actions */}
+      <div className="absolute bottom-4 left-0 w-full flex flex-col items-center gap-2 z-30">
+         <button 
+           onClick={() => startScan(true)}
+           className="text-xs font-bold text-slate-500 hover:text-white transition-colors border border-slate-700 px-4 py-2 rounded-full"
+         >
+           ДЕМО РЕЖИМ (БЕЗ BLUETOOTH)
+         </button>
+         <div className="text-[10px] text-slate-600 font-medium mt-1">
             Разработано Благоевски Димитаром
          </div>
       </div>

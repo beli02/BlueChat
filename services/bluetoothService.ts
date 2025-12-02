@@ -16,6 +16,9 @@ export class BluetoothService {
   private txCharacteristic: BluetoothRemoteGATTCharacteristic | null = null;
   private onMessageCallback: ((msg: string) => void) | null = null;
   private onDisconnectCallback: (() => void) | null = null;
+  
+  // Simulation flag
+  public isSimulation: boolean = false; 
 
   constructor() {
     if (!('bluetooth' in navigator)) {
@@ -23,41 +26,52 @@ export class BluetoothService {
     }
   }
 
-  /**
-   * Scans for devices by NAME only.
-   * This is the "Nuclear Option" for compatibility.
-   * Filtering by UUID often fails on Linux due to advertising packet size limits.
-   */
+  setSimulationMode(enabled: boolean) {
+    this.isSimulation = enabled;
+  }
+
   async scan(): Promise<any[]> {
+    // SIMULATION MODE
+    if (this.isSimulation) {
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          resolve([
+            { id: 'sim-1', name: 'Demo Chat Partner', rssi: -45, status: 'available' }
+          ]);
+        }, 800);
+      });
+    }
+
+    // REAL BLUETOOTH MODE
     try {
-      console.log("Starting Scan for name 'BlueChat'...");
+      console.log("Starting Scan (Accept All Devices)...");
       
+      // We use acceptAllDevices: true to bypass any UUID/Name filtering issues.
+      // This forces the phone to show everything, allowing the user to pick "BlueChat" manually.
       const device = await (navigator as any).bluetooth.requestDevice({
-        filters: [
-          { name: 'BlueChat' } // Strictly look for the name we set in ubuntu-server.js
-        ],
-        optionalServices: [UART_SERVICE_UUID] // Required to talk to it after finding it
+        acceptAllDevices: true,
+        optionalServices: [UART_SERVICE_UUID] 
       });
 
       console.log("Device selected:", device.name);
-      
       this.device = device;
       
-      return [{ id: device.id, name: device.name || 'BlueChat Device', rssi: -50, status: 'available' }];
+      return [{ id: device.id, name: device.name || 'Unnamed Device', rssi: -50, status: 'available' }];
     } catch (error) {
       console.error('Scan error:', error);
       throw error;
     }
   }
 
-  /**
-   * Connects to the device.
-   */
   async connect(deviceId: string): Promise<void> {
+    if (this.isSimulation) {
+      this.simulateConnection();
+      return;
+    }
+
     if (!this.device) {
       throw new Error("Устройство не выбрано (No Device Cache)");
     }
-
     await this.connectToDeviceObject(this.device);
   }
 
@@ -88,11 +102,26 @@ export class BluetoothService {
   }
 
   async send(text: string): Promise<void> {
+    if (this.isSimulation) {
+      // Simulate reply
+      setTimeout(() => {
+        if (this.onMessageCallback) this.onMessageCallback(`Эхо: ${text}`);
+      }, 1000);
+      return;
+    }
+
     if (!this.rxCharacteristic) throw new Error("Нет соединения");
 
     const encoder = new TextEncoder();
     const data = encoder.encode(text);
     await this.rxCharacteristic.writeValue(data);
+  }
+
+  // ... Rest of the simulation helpers ...
+  private simulateConnection() {
+    setTimeout(() => {
+      // Fake success
+    }, 500);
   }
 
   onMessage(callback: (msg: string) => void) {

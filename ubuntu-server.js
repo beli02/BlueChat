@@ -2,106 +2,96 @@
 /*
   UBUNTU BLUETOOTH SERVER (PERIPHERAL)
   ------------------------------------
-  Run this script on your Ubuntu machine to simulate a Chat Partner.
-  
-  PREREQUISITES:
-  1. System tools: sudo apt-get install bluetooth bluez libbluetooth-dev libudev-dev build-essential
-  2. Node package: npm install @abandonware/bleno
-  3. Run: sudo node ubuntu-server.js
-
-  This will advertise the "BlueChat" device that your Android phone can connect to.
 */
 
-// We use @abandonware/bleno because the original 'bleno' does not work on Node 10+
-let bleno;
-try {
-  bleno = require('@abandonware/bleno');
-} catch (e) {
+const { exec } = require('child_process');
+
+console.log("Initializing...");
+console.log("Resetting Bluetooth Adapter (hci0)...");
+
+// FORCE RESET BLUETOOTH ADAPTER
+exec('sudo hciconfig hci0 down && sudo hciconfig hci0 up', (err, stdout, stderr) => {
+  if (err) {
+    console.error("Warning: Could not reset bluetooth adapter (sudo needed?)");
+    console.error(err);
+  } else {
+    console.log("Bluetooth Adapter Reset Complete.");
+  }
+  startBleno();
+});
+
+function startBleno() {
+  let bleno;
   try {
-    bleno = require('bleno');
-    console.warn("WARNING: Using old 'bleno'. If it crashes, install '@abandonware/bleno'");
-  } catch (e2) {
-    console.error("ERROR: Could not find 'bleno' or '@abandonware/bleno'.");
-    console.error("Please run: npm install @abandonware/bleno");
-    process.exit(1);
+    bleno = require('@abandonware/bleno');
+  } catch (e) {
+    try {
+      bleno = require('bleno');
+    } catch (e2) {
+      console.error("ERROR: Run 'npm install @abandonware/bleno'");
+      process.exit(1);
+    }
   }
+
+  const SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+  const TX_UUID = '6e400003-b5a3-f393-e0a9-e50e24dcca9e'; 
+  const RX_UUID = '6e400002-b5a3-f393-e0a9-e50e24dcca9e'; 
+
+  let updateValueCallback = null;
+
+  const TxCharacteristic = new bleno.Characteristic({
+    uuid: TX_UUID,
+    properties: ['notify'],
+    onSubscribe: function(maxValueSize, updateValueCallbackRef) {
+      console.log('Client Subscribed!');
+      updateValueCallback = updateValueCallbackRef;
+      setTimeout(() => sendMessage("Chat Server Ready!"), 1000);
+    },
+    onUnsubscribe: function() {
+      console.log('Client Unsubscribed');
+      updateValueCallback = null;
+    }
+  });
+
+  const RxCharacteristic = new bleno.Characteristic({
+    uuid: RX_UUID,
+    properties: ['write', 'writeWithoutResponse'],
+    onWriteRequest: function(data, offset, withoutResponse, callback) {
+      const message = data.toString('utf-8');
+      console.log(`Msg: ${message}`);
+      callback(this.RESULT_SUCCESS);
+      setTimeout(() => sendMessage(`Echo: ${message}`), 500);
+    }
+  });
+
+  function sendMessage(text) {
+    if (updateValueCallback) {
+      const data = Buffer.from(text, 'utf-8');
+      updateValueCallback(data);
+    }
+  }
+
+  bleno.on('stateChange', function(state) {
+    if (state === 'poweredOn') {
+      console.log('Bluetooth ON. Advertising "BlueChat"...');
+      // 31-byte limit is tricky. We advertise Name + Service UUID.
+      bleno.startAdvertising('BlueChat', [SERVICE_UUID]);
+    } else {
+      bleno.stopAdvertising();
+    }
+  });
+
+  bleno.on('advertisingStart', function(error) {
+    if (!error) {
+      bleno.setServices([
+        new bleno.PrimaryService({
+          uuid: SERVICE_UUID,
+          characteristics: [TxCharacteristic, RxCharacteristic]
+        })
+      ]);
+      console.log("Server Running. Scan now!");
+    } else {
+      console.error('Advertising Error:', error);
+    }
+  });
 }
-
-// Nordic UART Service UUIDs (Must match the App's types.ts)
-const SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
-const TX_UUID = '6e400003-b5a3-f393-e0a9-e50e24dcca9e'; // Notify (Sending to Phone)
-const RX_UUID = '6e400002-b5a3-f393-e0a9-e50e24dcca9e'; // Write (Receiving from Phone)
-
-let updateValueCallback = null;
-
-// Define the TX Characteristic (Phone subscribes to this to get messages)
-const TxCharacteristic = new bleno.Characteristic({
-  uuid: TX_UUID,
-  properties: ['notify'],
-  onSubscribe: function(maxValueSize, updateValueCallbackRef) {
-    console.log('Phone subscribed to notifications (Connected)');
-    updateValueCallback = updateValueCallbackRef;
-    
-    // Send a welcome message after 1 second
-    setTimeout(() => {
-      sendMessage("Привет из Ubuntu! Я готов к общению.");
-    }, 1000);
-  },
-  onUnsubscribe: function() {
-    console.log('Phone unsubscribed (Disconnected)');
-    updateValueCallback = null;
-  }
-});
-
-// Define the RX Characteristic (Phone writes to this)
-const RxCharacteristic = new bleno.Characteristic({
-  uuid: RX_UUID,
-  properties: ['write', 'writeWithoutResponse'],
-  onWriteRequest: function(data, offset, withoutResponse, callback) {
-    const message = data.toString('utf-8');
-    console.log(`Received from Phone: ${message}`);
-    
-    callback(this.RESULT_SUCCESS);
-
-    // Auto-reply logic for testing
-    setTimeout(() => {
-      sendMessage(`Вы сказали: "${message}"`);
-    }, 500);
-  }
-});
-
-// Helper to send data to phone
-function sendMessage(text) {
-  if (updateValueCallback) {
-    console.log(`Sending: ${text}`);
-    const data = Buffer.from(text, 'utf-8');
-    updateValueCallback(data);
-  }
-}
-
-// Start Advertising
-bleno.on('stateChange', function(state) {
-  if (state === 'poweredOn') {
-    // CRITICAL FIX: Name shortened to 'BlueChat' to fit 31-byte limit with UUID
-    console.log('Bluetooth ON. Advertising "BlueChat"...');
-    bleno.startAdvertising('BlueChat', [SERVICE_UUID]);
-  } else {
-    bleno.stopAdvertising();
-  }
-});
-
-bleno.on('advertisingStart', function(error) {
-  if (!error) {
-    bleno.setServices([
-      new bleno.PrimaryService({
-        uuid: SERVICE_UUID,
-        characteristics: [TxCharacteristic, RxCharacteristic]
-      })
-    ]);
-  } else {
-    console.error('Advertising error:', error);
-  }
-});
-
-console.log("Starting BlueChat Server...");
-console.log("Ensure Bluetooth is ON and no other process is using it.");
