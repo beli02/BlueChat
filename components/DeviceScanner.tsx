@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { BluetoothDeviceDisplay } from '../types';
 import { bluetoothService } from '../services/bluetoothService';
@@ -20,6 +21,10 @@ const DeviceScanner: React.FC<DeviceScannerProps> = ({ onConnect, isSimulated, t
     setDevices([]);
 
     try {
+      // Logic for Web Bluetooth:
+      // Calling scan() triggers the browser's native Picker.
+      // If the user selects a device, it returns an array with that single device.
+      // The service effectively caches the device instance.
       const foundDevices = await bluetoothService.scan();
       
       const formattedDevices: BluetoothDeviceDisplay[] = foundDevices.map(d => ({
@@ -29,43 +34,47 @@ const DeviceScanner: React.FC<DeviceScannerProps> = ({ onConnect, isSimulated, t
         status: 'available'
       }));
 
-      // If simulated, just set them. If real, the browser picker handles selection.
-      if (!isSimulated && formattedDevices.length > 0) {
-        handleConnectRequest(formattedDevices[0]);
-      } else {
+      // If we found a device (meaning user selected one in Real mode), proceed to connect immediately
+      if (formattedDevices.length > 0) {
         setDevices(formattedDevices);
+        // Automatically start connecting to the selected device
+        handleConnect(formattedDevices[0]);
+      } else {
+        setError("Устройства не найдены");
       }
 
     } catch (err: any) {
+      console.error("Scan Error in UI:", err);
       if (err.name === 'NotFoundError') {
-        // User cancelled the picker, do nothing
+        // User cancelled the picker
+        setError("Поиск отменен пользователем");
+      } else if (err.name === 'SecurityError') {
+        setError("Ошибка безопасности: Используйте HTTPS или Localhost");
       } else {
-        setError(err.message || 'Ошибка сканирования');
+        setError(err.message || 'Ошибка сканирования. Проверьте Bluetooth.');
       }
     } finally {
       setIsScanning(false);
     }
   };
 
-  const handleConnectRequest = async (device: BluetoothDeviceDisplay) => {
+  const handleConnect = async (device: BluetoothDeviceDisplay) => {
     try {
+      setError(null);
+      // Update UI to show connecting state
       setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'connecting' } : d));
       
-      if (!isSimulated) {
-          const realDevice = await (navigator as any).bluetooth.requestDevice({
-              filters: [{ services: ['6e400001-b5a3-f393-e0a9-e50e24dcca9e'] }],
-              optionalServices: ['6e400001-b5a3-f393-e0a9-e50e24dcca9e']
-          });
-          await bluetoothService.connectToDeviceObject(realDevice);
-      } else {
-          await bluetoothService.connect(device.id);
-      }
+      // Call service to connect. 
+      // NOTE: In Real mode, the service ALREADY has the device instance from the scan() step.
+      // It will not ask the user again.
+      await bluetoothService.connect(device.id);
 
+      // Notify parent to switch view
       onConnect(device);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      console.error("Connect Error:", err);
       setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'error' } : d));
-      setError("Ошибка подключения. Подойдите ближе.");
+      setError(`Ошибка подключения: ${err.message || 'Сбой'}`);
     }
   };
 
@@ -106,7 +115,7 @@ const DeviceScanner: React.FC<DeviceScannerProps> = ({ onConnect, isSimulated, t
         </div>
         
         <p className="text-slate-400 text-sm mb-8 text-center">
-          {isScanning ? 'Поиск устройств...' : 'Подключитесь к устройству'}
+          {isScanning ? 'Поиск устройств...' : 'Нажмите кнопку поиска'}
         </p>
 
         {/* Radar UI */}
@@ -140,7 +149,7 @@ const DeviceScanner: React.FC<DeviceScannerProps> = ({ onConnect, isSimulated, t
           {devices.map((device) => (
             <div 
               key={device.id}
-              onClick={() => device.status === 'available' && handleConnectRequest(device)}
+              onClick={() => device.status === 'available' && handleConnect(device)}
               className={`p-4 rounded-xl border flex items-center justify-between transition-all cursor-pointer ${
                 device.status === 'connecting' 
                   ? 'border-yellow-500/50 bg-yellow-500/10' 
@@ -154,6 +163,7 @@ const DeviceScanner: React.FC<DeviceScannerProps> = ({ onConnect, isSimulated, t
                     <p className="text-xs text-slate-500">ID: {device.id.substring(0, 15)}...</p>
                  </div>
               </div>
+              {device.status === 'connecting' && <span className="text-xs text-yellow-400">Подключение...</span>}
             </div>
           ))}
 
@@ -178,7 +188,7 @@ const DeviceScanner: React.FC<DeviceScannerProps> = ({ onConnect, isSimulated, t
            className="text-xs text-slate-500 hover:text-primary transition-colors flex items-center gap-2 mb-2"
          >
            <span className={`w-2 h-2 rounded-full ${isSimulated ? 'bg-green-500' : 'bg-slate-600'}`}></span>
-           {isSimulated ? 'Режим Симуляции' : 'Режим Bluetooth'}
+           {isSimulated ? 'Режим Симуляции' : 'Режим Bluetooth (Real)'}
          </button>
          
          <div className="text-[10px] text-slate-600 font-medium">
