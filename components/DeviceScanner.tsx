@@ -5,11 +5,9 @@ import { bluetoothService } from '../services/bluetoothService';
 
 interface DeviceScannerProps {
   onConnect: (device: BluetoothDeviceDisplay) => void;
-  isSimulated: boolean;
-  toggleSimulation: () => void;
 }
 
-const DeviceScanner: React.FC<DeviceScannerProps> = ({ onConnect, isSimulated, toggleSimulation }) => {
+const DeviceScanner: React.FC<DeviceScannerProps> = ({ onConnect }) => {
   const [isScanning, setIsScanning] = useState(false);
   const [devices, setDevices] = useState<BluetoothDeviceDisplay[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -22,7 +20,6 @@ const DeviceScanner: React.FC<DeviceScannerProps> = ({ onConnect, isSimulated, t
 
   const startScan = async () => {
     // CRITICAL: We must call the API *immediately* on click to preserve the User Gesture.
-    // Do not set state or await anything else before this call if possible.
     setError(null);
     setDevices([]);
     addLog("Запуск сканирования...");
@@ -107,8 +104,8 @@ const DeviceScanner: React.FC<DeviceScannerProps> = ({ onConnect, isSimulated, t
             </div>
             <div className="bg-slate-800 p-3 rounded">
               <strong className="text-white block mb-1">3. Не видно сервер?</strong>
-              <p>Попробуйте перезагрузить Bluetooth на Linux:</p>
-              <code className="block bg-black p-1 text-xs mt-1">sudo hciconfig hci0 reset</code>
+              <p>1. Перезагрузите скрипт на Ubuntu (sudo node ubuntu-server.js)</p>
+              <p>2. Выключите/Включите Bluetooth на телефоне (очистка кэша)</p>
             </div>
           </div>
           <button 
@@ -201,16 +198,8 @@ const DeviceScanner: React.FC<DeviceScannerProps> = ({ onConnect, isSimulated, t
         </div>
       </div>
 
-      {/* Footer / Mode Toggle */}
+      {/* Footer (No Simulation Toggle) */}
       <div className="absolute bottom-4 left-0 w-full flex flex-col items-center gap-2">
-         <button 
-           onClick={toggleSimulation}
-           className="text-xs text-slate-500 hover:text-primary transition-colors flex items-center gap-2 mb-2"
-         >
-           <span className={`w-2 h-2 rounded-full ${isSimulated ? 'bg-green-500' : 'bg-slate-600'}`}></span>
-           {isSimulated ? 'Режим Симуляции' : 'Режим Bluetooth (Real)'}
-         </button>
-         
          <div className="text-[10px] text-slate-600 font-medium">
             Разработано Благоевски Димитаром
          </div>

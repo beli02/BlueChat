@@ -1,25 +1,16 @@
+
 import React, { useState, useEffect } from 'react';
 import DeviceScanner from './components/DeviceScanner';
 import ChatScreen from './components/ChatScreen';
 import { AppView, BluetoothDeviceDisplay } from './types';
-import { bluetoothService } from './services/bluetoothService';
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<AppView>(AppView.SCANNER);
   const [activeDevice, setActiveDevice] = useState<BluetoothDeviceDisplay | null>(null);
-  const [isSimulated, setIsSimulated] = useState<boolean>(true);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBtn, setShowInstallBtn] = useState(false);
 
-  // Sync simulation state with service on mount
   useEffect(() => {
-    // Check if we are in a browser that supports Web Bluetooth
-    const hasBluetooth = 'bluetooth' in navigator;
-    // Default to Real mode if bluetooth is present, otherwise Sim
-    const initialMode = !hasBluetooth; 
-    setIsSimulated(initialMode);
-    bluetoothService.setSimulationMode(initialMode);
-
     // PWA Install Prompt Listener
     window.addEventListener('beforeinstallprompt', (e) => {
       e.preventDefault();
@@ -27,12 +18,6 @@ const App: React.FC = () => {
       setShowInstallBtn(true);
     });
   }, []);
-
-  const toggleSimulation = () => {
-    const newState = !isSimulated;
-    setIsSimulated(newState);
-    bluetoothService.setSimulationMode(newState);
-  };
 
   const handleInstallClick = async () => {
     if (!deferredPrompt) return;
@@ -72,8 +57,6 @@ const App: React.FC = () => {
        {currentView === AppView.SCANNER && (
          <DeviceScanner 
            onConnect={handleDeviceConnect} 
-           isSimulated={isSimulated}
-           toggleSimulation={toggleSimulation}
          />
        )}
        

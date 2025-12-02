@@ -1,5 +1,5 @@
 
-import { UART_SERVICE_UUID, UART_RX_CHAR_UUID, UART_TX_CHAR_UUID, ChatMessage } from '../types';
+import { UART_SERVICE_UUID, UART_RX_CHAR_UUID, UART_TX_CHAR_UUID } from '../types';
 
 // Types for Web Bluetooth API (Partial)
 interface BluetoothRemoteGATTCharacteristic extends EventTarget {
@@ -9,21 +9,6 @@ interface BluetoothRemoteGATTCharacteristic extends EventTarget {
   value?: DataView;
 }
 
-// Mock Data for Simulation
-const MOCK_DEVICES = [
-  { id: 'mock-1', name: 'iPhone 13 Pro (Sim)', rssi: -45 },
-  { id: 'mock-2', name: 'Galaxy S23 (Sim)', rssi: -62 },
-  { id: 'mock-3', name: 'ESP32_UART_DEVICE', rssi: -80 },
-];
-
-const MOCK_RESPONSES = [
-  "Привет! Связь стабильная.",
-  "Данные получены.",
-  "Это тестовое сообщение через Bluetooth симуляцию.",
-  "Классный интерфейс!",
-  "Офлайн чат работает отлично."
-];
-
 export class BluetoothService {
   private device: any = null;
   private server: any = null;
@@ -31,63 +16,34 @@ export class BluetoothService {
   private txCharacteristic: BluetoothRemoteGATTCharacteristic | null = null;
   private onMessageCallback: ((msg: string) => void) | null = null;
   private onDisconnectCallback: (() => void) | null = null;
-  
-  // State for simulation
-  private isSimulation: boolean = true; 
 
   constructor() {
-    // Check if browser supports Bluetooth
-    if ('bluetooth' in navigator) {
-      this.isSimulation = false;
-    } else {
-      console.warn("Web Bluetooth not supported. Falling back to simulation.");
-      this.isSimulation = true;
+    if (!('bluetooth' in navigator)) {
+      console.warn("Web Bluetooth not supported on this browser.");
     }
-  }
-
-  setSimulationMode(enabled: boolean) {
-    this.isSimulation = enabled;
-  }
-
-  getIsSimulation() {
-    return this.isSimulation;
   }
 
   /**
-   * Scans for devices.
-   * Brave/Android Note: We must use 'filters' with specific UUIDs. 
-   * 'acceptAllDevices' is often blocked by privacy shields.
+   * Scans for devices by NAME only.
+   * This is the "Nuclear Option" for compatibility.
+   * Filtering by UUID often fails on Linux due to advertising packet size limits.
    */
   async scan(): Promise<any[]> {
-    if (this.isSimulation) {
-      return new Promise((resolve) => {
-        setTimeout(() => {
-          resolve(MOCK_DEVICES);
-        }, 1500);
-      });
-    }
-
     try {
-      console.log("Starting Scan...");
+      console.log("Starting Scan for name 'BlueChat'...");
       
-      // CRITICAL UPDATE: 
-      // 1. Look for Service UUID (Standard)
-      // 2. OR Look for Name 'BlueChat' (Fallback if Linux drops UUID from packet)
-      // 3. Must include optionalServices to access the UART service if matched by Name.
       const device = await (navigator as any).bluetooth.requestDevice({
         filters: [
-          { services: [UART_SERVICE_UUID] },
-          { name: 'BlueChat' }
+          { name: 'BlueChat' } // Strictly look for the name we set in ubuntu-server.js
         ],
-        optionalServices: [UART_SERVICE_UUID]
+        optionalServices: [UART_SERVICE_UUID] // Required to talk to it after finding it
       });
 
-      console.log("Device selected by user:", device.name);
+      console.log("Device selected:", device.name);
       
-      // CACHE THE DEVICE
       this.device = device;
       
-      return [{ id: device.id, name: device.name || 'Неизвестное устройство', rssi: -50 }];
+      return [{ id: device.id, name: device.name || 'BlueChat Device', rssi: -50, status: 'available' }];
     } catch (error) {
       console.error('Scan error:', error);
       throw error;
@@ -96,15 +52,8 @@ export class BluetoothService {
 
   /**
    * Connects to the device.
-   * Uses the cached device object to avoid asking permission twice.
    */
   async connect(deviceId: string): Promise<void> {
-    if (this.isSimulation) {
-      return new Promise((resolve) => {
-        setTimeout(resolve, 1000);
-      });
-    }
-
     if (!this.device) {
       throw new Error("Устройство не выбрано (No Device Cache)");
     }
@@ -139,20 +88,6 @@ export class BluetoothService {
   }
 
   async send(text: string): Promise<void> {
-    if (this.isSimulation) {
-      return new Promise((resolve) => {
-        setTimeout(() => {
-          if (Math.random() > 0.3 && this.onMessageCallback) {
-            setTimeout(() => {
-              const randomResponse = MOCK_RESPONSES[Math.floor(Math.random() * MOCK_RESPONSES.length)];
-              this.onMessageCallback!(randomResponse);
-            }, 2000);
-          }
-          resolve();
-        }, 300);
-      });
-    }
-
     if (!this.rxCharacteristic) throw new Error("Нет соединения");
 
     const encoder = new TextEncoder();
