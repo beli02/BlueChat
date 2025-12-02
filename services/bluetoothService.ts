@@ -55,7 +55,8 @@ export class BluetoothService {
 
   /**
    * Scans for devices.
-   * In Real mode: Opens the browser picker. If user selects a device, we CACHE it.
+   * Brave/Android Note: We must use 'filters' with specific UUIDs. 
+   * 'acceptAllDevices' is often blocked by privacy shields.
    */
   async scan(): Promise<any[]> {
     if (this.isSimulation) {
@@ -67,20 +68,19 @@ export class BluetoothService {
     }
 
     try {
-      console.log("Requesting Bluetooth Device...");
-      // In a real app, we scan for devices advertising the UART service
-      // Note: requestDevice requires a user gesture (this function must be called from a click handler)
+      console.log("Starting Scan...");
+      
+      // We explicitly look for the Nordic UART Service.
+      // This is required for the browser to allow connection to the service later.
       const device = await (navigator as any).bluetooth.requestDevice({
-        filters: [{ services: [UART_SERVICE_UUID] }],
-        optionalServices: [UART_SERVICE_UUID]
+        filters: [{ services: [UART_SERVICE_UUID] }]
       });
 
       console.log("Device selected by user:", device.name);
       
-      // CACHE THE DEVICE so we can connect to it later without asking again
+      // CACHE THE DEVICE
       this.device = device;
       
-      // Return a displayable object
       return [{ id: device.id, name: device.name || 'Неизвестное устройство', rssi: -50 }];
     } catch (error) {
       console.error('Scan error:', error);
@@ -90,7 +90,7 @@ export class BluetoothService {
 
   /**
    * Connects to the device.
-   * In Real mode: Uses the CACHED device from the scan step.
+   * Uses the cached device object to avoid asking permission twice.
    */
   async connect(deviceId: string): Promise<void> {
     if (this.isSimulation) {
@@ -99,20 +99,13 @@ export class BluetoothService {
       });
     }
 
-    // Check if we have a device cached from the scan step
     if (!this.device) {
-      throw new Error("Устройство не выбрано. Пожалуйста, выполните поиск снова.");
-    }
-
-    // Double check IDs match (though with privacy enabled, IDs might rotate, so we mostly trust the instance)
-    if (this.device.id !== deviceId) {
-      console.warn("Connecting to a different ID than scanned? Proceeding with cached device anyway.");
+      throw new Error("Устройство не выбрано (No Device Cache)");
     }
 
     await this.connectToDeviceObject(this.device);
   }
 
-  // Helper to attach to a real Web Bluetooth Device object
   async connectToDeviceObject(device: any): Promise<void> {
     try {
       this.device = device;
@@ -133,8 +126,8 @@ export class BluetoothService {
       this.txCharacteristic?.addEventListener('characteristicvaluechanged', this.handleCharacteristicValueChanged.bind(this));
       console.log("Connected successfully!");
     } catch (err) {
-      console.error("Connection failed:", err);
-      this.disconnect(); // Cleanup
+      console.error("Connection failed details:", err);
+      this.disconnect();
       throw err;
     }
   }
@@ -143,7 +136,6 @@ export class BluetoothService {
     if (this.isSimulation) {
       return new Promise((resolve) => {
         setTimeout(() => {
-          // Echo back a response randomly
           if (Math.random() > 0.3 && this.onMessageCallback) {
             setTimeout(() => {
               const randomResponse = MOCK_RESPONSES[Math.floor(Math.random() * MOCK_RESPONSES.length)];

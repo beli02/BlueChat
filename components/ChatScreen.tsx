@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { BluetoothDeviceDisplay, ChatMessage } from '../types';
 import { bluetoothService } from '../services/bluetoothService';
@@ -118,7 +119,7 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ device, onDisconnect }) => {
           return (
             <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
               <div 
-                className={`max-w-[75%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed shadow-sm ${
+                className={`max-w-[75%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed shadow-sm break-words ${
                   isMe 
                     ? 'bg-primary text-darker rounded-tr-none' 
                     : 'bg-surface text-slate-200 border border-slate-700 rounded-tl-none'

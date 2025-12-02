@@ -13,20 +13,28 @@ const DeviceScanner: React.FC<DeviceScannerProps> = ({ onConnect, isSimulated, t
   const [isScanning, setIsScanning] = useState(false);
   const [devices, setDevices] = useState<BluetoothDeviceDisplay[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [debugLog, setDebugLog] = useState<string[]>([]);
   const [showHelp, setShowHelp] = useState(false);
 
+  const addLog = (msg: string) => {
+    setDebugLog(prev => [msg, ...prev].slice(0, 5)); // Keep last 5 logs
+  };
+
   const startScan = async () => {
-    setIsScanning(true);
+    // CRITICAL: We must call the API *immediately* on click to preserve the User Gesture.
+    // Do not set state or await anything else before this call if possible.
     setError(null);
     setDevices([]);
+    addLog("Запуск сканирования...");
 
     try {
-      // Logic for Web Bluetooth:
-      // Calling scan() triggers the browser's native Picker.
-      // If the user selects a device, it returns an array with that single device.
-      // The service effectively caches the device instance.
+      // 1. Trigger the native browser picker immediately
       const foundDevices = await bluetoothService.scan();
       
+      // 2. Only update state AFTER the user has interacted with the native picker
+      setIsScanning(true);
+      addLog("Устройство выбрано!");
+
       const formattedDevices: BluetoothDeviceDisplay[] = foundDevices.map(d => ({
         id: d.id,
         name: d.name || 'Неизвестное устройство',
@@ -34,47 +42,47 @@ const DeviceScanner: React.FC<DeviceScannerProps> = ({ onConnect, isSimulated, t
         status: 'available'
       }));
 
-      // If we found a device (meaning user selected one in Real mode), proceed to connect immediately
       if (formattedDevices.length > 0) {
         setDevices(formattedDevices);
-        // Automatically start connecting to the selected device
         handleConnect(formattedDevices[0]);
       } else {
         setError("Устройства не найдены");
+        setIsScanning(false);
       }
 
     } catch (err: any) {
-      console.error("Scan Error in UI:", err);
-      if (err.name === 'NotFoundError') {
-        // User cancelled the picker
-        setError("Поиск отменен пользователем");
-      } else if (err.name === 'SecurityError') {
-        setError("Ошибка безопасности: Используйте HTTPS или Localhost");
-      } else {
-        setError(err.message || 'Ошибка сканирования. Проверьте Bluetooth.');
-      }
-    } finally {
+      console.error("Scan Error:", err);
+      addLog(`ERR: ${err.name} - ${err.message}`);
+      
       setIsScanning(false);
+
+      if (err.name === 'NotFoundError') {
+        setError("Поиск отменен (или тайм-аут)");
+      } else if (err.name === 'SecurityError') {
+        setError("Нужен HTTPS или Localhost");
+      } else if (err.name === 'NotAllowedError') {
+        setError("Доступ запрещен. Проверьте настройки Brave/Android.");
+      } else {
+        setError(`Ошибка: ${err.message}`);
+      }
     }
   };
 
   const handleConnect = async (device: BluetoothDeviceDisplay) => {
     try {
+      addLog("Подключение...");
       setError(null);
-      // Update UI to show connecting state
       setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'connecting' } : d));
       
-      // Call service to connect. 
-      // NOTE: In Real mode, the service ALREADY has the device instance from the scan() step.
-      // It will not ask the user again.
       await bluetoothService.connect(device.id);
 
-      // Notify parent to switch view
+      addLog("Успех!");
       onConnect(device);
     } catch (err: any) {
       console.error("Connect Error:", err);
+      addLog(`CONN ERR: ${err.message}`);
       setDevices(prev => prev.map(d => d.id === device.id ? { ...d, status: 'error' } : d));
-      setError(`Ошибка подключения: ${err.message || 'Сбой'}`);
+      setError(`Ошибка подключения: ${err.message}`);
     }
   };
 
@@ -87,19 +95,26 @@ const DeviceScanner: React.FC<DeviceScannerProps> = ({ onConnect, isSimulated, t
       {/* Help Modal */}
       {showHelp && (
         <div className="absolute inset-0 z-50 bg-darker/95 p-6 flex flex-col justify-center animate-fade-in">
-          <h3 className="text-xl font-bold text-primary mb-4">Тест с Ubuntu?</h3>
-          <div className="text-sm text-slate-300 space-y-3 mb-6">
-            <p>Чтобы общаться между телефоном и компьютером, компьютер должен быть <strong>Сервером</strong>.</p>
-            <p>1. Установите <strong>Node.js</strong> на Ubuntu.</p>
-            <p>2. Скопируйте файл <code>ubuntu-server.js</code>.</p>
-            <p>3. Запустите: <code className="bg-slate-800 px-1 py-0.5 rounded">sudo node ubuntu-server.js</code></p>
-            <p>4. Нажмите Поиск ниже. Выберите <strong>"BlueChat Host"</strong>.</p>
+          <h3 className="text-xl font-bold text-primary mb-4">Проблемы с Android/Brave?</h3>
+          <div className="text-sm text-slate-300 space-y-3 mb-6 overflow-y-auto max-h-[60vh]">
+            <div className="bg-slate-800 p-3 rounded">
+              <strong className="text-white block mb-1">1. Геолокация (GPS)</strong>
+              <p>На Android Bluetooth требует включенного GPS.</p>
+            </div>
+            <div className="bg-slate-800 p-3 rounded">
+              <strong className="text-white block mb-1">2. Права браузера</strong>
+              <p>Настройки -> Приложения -> Brave -> Права -> Местоположение (Разрешить).</p>
+            </div>
+            <div className="bg-slate-800 p-3 rounded">
+              <strong className="text-white block mb-1">3. Brave Shields</strong>
+              <p>Нажмите на иконку Льва в адресной строке и ОТКЛЮЧИТЕ защиту для этого сайта (Shields DOWN).</p>
+            </div>
           </div>
           <button 
             onClick={() => setShowHelp(false)}
             className="w-full py-3 bg-secondary text-white rounded-lg font-bold"
           >
-            Понятно
+            Закрыть
           </button>
         </div>
       )}
@@ -115,7 +130,7 @@ const DeviceScanner: React.FC<DeviceScannerProps> = ({ onConnect, isSimulated, t
         </div>
         
         <p className="text-slate-400 text-sm mb-8 text-center">
-          {isScanning ? 'Поиск устройств...' : 'Нажмите кнопку поиска'}
+          {isScanning ? 'Инициализация...' : 'Нажмите кнопку поиска'}
         </p>
 
         {/* Radar UI */}
@@ -167,15 +182,19 @@ const DeviceScanner: React.FC<DeviceScannerProps> = ({ onConnect, isSimulated, t
             </div>
           ))}
 
-          {devices.length === 0 && !isScanning && !error && (
-            <div className="text-center text-slate-600 mt-4 text-sm">
-              Нажмите кнопку поиска.
-            </div>
-          )}
-
           {error && (
             <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm text-center">
               {error}
+            </div>
+          )}
+
+          {/* DEBUG LOG - Helps identify Brave/Android issues */}
+          {debugLog.length > 0 && (
+            <div className="mt-4 p-2 bg-black/40 rounded text-[10px] font-mono text-slate-500 w-full overflow-hidden">
+              <div className="text-slate-400 mb-1 border-b border-slate-700">DEBUG LOG:</div>
+              {debugLog.map((log, i) => (
+                <div key={i}>{log}</div>
+              ))}
             </div>
           )}
         </div>
