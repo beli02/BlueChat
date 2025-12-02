@@ -1,0 +1,5 @@
+{
+  "name": "BlueChat",
+  "description": "A local offline Bluetooth chat application using Web Bluetooth API or simulation mode for instant messaging without internet.",
+  "requestFramePermissions": []
+}
